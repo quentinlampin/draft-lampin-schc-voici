@@ -156,13 +156,13 @@ insufficient for multiplexing.
 
 ## Summary
 
-| Mechanism       | Multiplexing | Version Awareness | Integrity | Overhead | Link Coverage |
-|-----------------|-------------|-------------------|-----------|----------|---------------|
-| MPLS            | Yes         | No                | No        | 4+ bytes | Limited       |
-| UDP (src port)  | Yes         | No                | No        | 8 bytes  | IP only       |
-| IP Protocol Num | No          | No                | No        | 0 bytes  | IP only       |
-| Ethertype       | No          | No                | No        | 0 bytes  | IEEE 802 only |
-| **SCHC-TE**     | **Yes**     | **Yes**           | **Opt.**  | **3 bytes** | **Any**       |
+| Mechanism       | Multiplexing | Version Awareness | Integrity | Overhead    | Link Coverage |
+|-----------------|--------------|-------------------|-----------|-------------|---------------|
+| MPLS            | Yes          | No                | No        | 4+ bytes    | Limited       |
+| UDP (src port)  | Yes          | No                | No        | 8 bytes     | IP only       |
+| IP Protocol Num | No           | No                | No        | 0 bytes     | IP only       |
+| Ethertype       | No           | No                | No        | 0 bytes     | IEEE 802 only |
+| **SCHC-TE**     | **Yes**      | **Yes**           | **Opt.**  | **3 bytes** | **Any**       |
 
 SCHC-TE fills the gap by providing all four required capabilities with minimal
 overhead.
@@ -172,20 +172,22 @@ overhead.
 ~~~
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|V|I|N|  Reserved/NPI |      Session ID                            |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|      Context Version (optional, present if V=1)               |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                    CRC (optional, present if I=1)             |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                                                               |
-|                         SCHC Datagram                         |
-|                                                               |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
++-+-+-+-----+----------------+--------+
+|V|I|N|NPI/R|   Session ID   |        |
++-+-+-+-----+----------------+--------+
++----------------+
+|Context Version |  (optional, present if V=1)
++----------------+
++----------------+
+|      CRC       |  (optional, present if I=1)
++----------------+
 ~~~
 
 **Figure 1: SCHC-TE Header**
+
+The first row (3 bytes) is always present. The Context Version row (2 bytes)
+is present when V=1. The CRC row (2 bytes) is present when I=1. The SCHC
+Datagram follows immediately after the header.
 
 ## Fields
 
@@ -224,27 +226,25 @@ When no optional fields are needed (V=0, I=0, N=0), the SCHC-TE header reduces
 to 3 bytes:
 
 ~~~
- 0                   1                   2
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|V|I|N|E|  Reserved   |      Session ID      |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|0|0|0|0|  0 0 0 0 0  |      Session ID      |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ 0               1               2
+ 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
++-+-+-+-----+----------------+
+|V|I|N|NPI/R|   Session ID   |
++-+-+-+-----+----------------+
 ~~~
 
 **Figure 2: Minimal SCHC-TE Header (3 bytes)**
 
 ## Header Size Summary
 
-| Configuration          | V | I | N | Size |
-|------------------------|---|---|---|------|
-| Session ID only        | 0 | 0 | 0 | 3 B  |
-| Session ID + Version   | 1 | 0 | 0 | 5 B  |
-| Session ID + CRC       | 0 | 1 | 0 | 5 B  |
+| Configuration              | V | I | N | Size |
+|----------------------------|---|---|---|------|
+| Session ID only            | 0 | 0 | 0 | 3 B  |
+| Session ID + Version       | 1 | 0 | 0 | 5 B  |
+| Session ID + CRC           | 0 | 1 | 0 | 5 B  |
 | Session ID + Version + CRC | 1 | 1 | 0 | 7 B  |
-| Session ID + Next-Proto| 0 | 0 | 1 | 3 B  |
-| All fields             | 1 | 1 | 1 | 7 B  |
+| Session ID + Next-Proto    | 0 | 0 | 1 | 3 B  |
+| All fields                 | 1 | 1 | 1 | 7 B  |
 
 # Session ID Allocation
 
@@ -454,7 +454,7 @@ required.
 ## Informative References
 
 [DRAFT-SCHC-ARCH]
-: Lampin, Q., "SCHC Architecture", Work in Progress.
+: Pelov, A. et al., "SCHC Architecture", Work in Progress.
 
 [DRAFT-PROTOCOL-NUMBERS]
 : Moskowitz, R., et al., "Protocol Numbers for SCHC", Work in Progress, Internet-Draft, draft-ietf-schc-protocol-numbers.
