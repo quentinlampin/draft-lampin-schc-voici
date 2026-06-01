@@ -1,7 +1,7 @@
 # Makefile for IETF draft generation using kramdown-rfc and xml2rfc
 
 # Variables
-DRAFT_NAME = draft-lampin-schc-transport-encapsulation-00
+DRAFT_NAME = draft-lampin-schc-lmx-00
 MARKDOWN_FILE = $(DRAFT_NAME).md
 XML_FILE = $(DRAFT_NAME).xml
 TXT_FILE = $(DRAFT_NAME).txt
