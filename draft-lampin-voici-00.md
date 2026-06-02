@@ -141,16 +141,15 @@ VOICI fills.
 MPLS labels provide efficient multiplexing and are
 widely deployed in operator networks.  However:
 
-* MPLS is not available on all link types relevant to SCHC (LPWAN, PPP,
-  low-speed serial links).
-* MPLS provides no version awareness mechanism.
-* MPLS provides no integrity protection.
 * MPLS adds 4 bytes per label, which may
   be excessive for highly constrained deployments.
+* MPLS is not available on all link types relevant to SCHC (LPWAN, PPP,
+  low-speed serial links).
+* MPLS provides no integrity protection.
 
 ## UDP Encapsulation
 
-UDP is commonly used for Internet traversal and NAT traversal.  The UDP
+UDP is commonly used for Internet traversal and NAT traversal. The UDP
 source port can carry a Session ID:
 
 * The UDP header is 8 bytes.
