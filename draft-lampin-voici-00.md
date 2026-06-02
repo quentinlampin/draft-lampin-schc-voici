@@ -199,7 +199,7 @@ inner-field approach would require every mechanism to reserve space for the
 same routing metadata, reducing compression efficiency. VOICI places this
 metadata in a single, mechanism-agnostic header.
 
-# Integration
+# Integration within SCHC framework
 
 VOICI integrates at the carrier layer using the SCHC Ethertype and IP/UDP
 protocol numbers defined in {{SCHC-PROTO-NUMS}}. These values identify VOICI
