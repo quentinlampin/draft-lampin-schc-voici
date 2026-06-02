@@ -212,7 +212,7 @@ framing information must be preserved for later restoration, the Original
 EtherType/Port flag (O) is set and the field is populated.
 
 On the receiver side, packets identified by the SCHC Ethertype or IP/UDP
-protocol number are handed to the VOICI dispatcher.  The VOICI module parses the
+protocol number are handed to the VOICI dispatcher. The VOICI module parses the
 header, uses the Session ID and CI field to route the Datagram to the correct
 processing handler, strips its own header, and optionally restores the original
 EtherType, IP Protocol Number, or UDP port number before passing the reconstituted
@@ -252,8 +252,8 @@ The Datagram payload follows immediately after the last header field.
    1 byte for IPv6 Next Header).
 5. Pass remaining buffer to the identified handler and recover
    original/content.
-6. If O=1, restore original Ethertype or Port number.
-7. Return processed frame.
+6. If O=1, restore original Ethertype or Port number and return processed frame
+    to original handler.
 
 ## Fields
 
