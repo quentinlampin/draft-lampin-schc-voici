@@ -104,29 +104,35 @@ uncompressed payloads.
 
 ## Requirements driven by SCHC
 
-1. **Session identification**:  A mechanism to distinguish Sessions and
+1. **Session identification**: A mechanism to distinguish Sessions and
    route Datagrams to the correct processing handler (for example, a SCHC
    Instance).  The identifier (Session ID) is locally significant to the
    link.
 
-2. **Integrity protection (optional)**:  A mechanism to detect corruption
+2. **Original EtherType/port recovery (optional)**: A mechanism to carry the
+   original EtherType or UDP port number when the carrier uses the SCHC
+   EtherType or SCHC UDP port.  This is needed when the payload is
+   decompressed so that the receiver can restore the original framing layer 
+   after decompression.
+  
+3. **Integrity protection (optional)**: A mechanism to detect corruption
    of the Datagram, including the Session ID and the compressed residue.
 
 ## Requirements driven by multi-mechanism and uncompressed payloads
 
-3. **Content identification**:  A mechanism to identify how the Datagram
+4. **Content identification**: A mechanism to identify how the Datagram
    payload is encoded when the link carries Datagrams from multiple
    mechanisms (for example, SCHC, uncompressed).  This allows the receiver
    to dispatch the Datagram to the correct decompressor without inspecting
    its contents.
 
-4. **Layer independence**:  The encapsulation MUST operate over any link
+5. **Layer independence**: The encapsulation MUST operate over any link
    layer that carries compressed traffic, whether identified by an
    Ethertype, IP Protocol Number, or UDP port {{SCHC-PROTO-NUMS}}.
 
 # Gap Analysis
 
-Several existing mechanisms can provide multiplexing or labeling.  This
+Several existing mechanisms can provide multiplexing or labeling. This
 section analyzes their suitability for SCHC and identifies the gap that
 VOICI fills.
 
