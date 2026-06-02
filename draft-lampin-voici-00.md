@@ -268,7 +268,7 @@ The Datagram payload follows immediately after the last header field.
   IEEE 802 Ethertype), as a Next Header if carried over IP, and as a UDP
   port when VOICI is carried in a UDP payload.  This restoration is an VOICI
   responsibility; the Content Mechanism does not need to manage framing
-  recovery.
+  recovery and dispatching to original handler.
 
 * **I (1 bit):**  Integrity flag.  When set, a CRC-16 field is present and
   covers the Session ID through the end of the datagram.  When clear, no
