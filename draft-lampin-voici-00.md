@@ -391,11 +391,11 @@ for global uniqueness.
 # Content Mechanism Identification
 
 The CI field provides content mechanism identification. VOICI at the receiver
-uses the CI value to dispatch the Datagram to the correct handler without
-inspecting the Datagram contents.
+uses the CI and Session ID values to dispatch the Datagram to the correct 
+handler without inspecting the Datagram contents.
 
 This is needed when a link carries Datagrams from multiple mechanisms
-simultaneously.  Common scenarios include:
+simultaneously. Common scenarios include:
 
 * A gateway that receives both  SCHC-compressed Datagrams and Management and 
   diagnostic traffic that bypasses compression entirely.
