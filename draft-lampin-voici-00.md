@@ -111,7 +111,7 @@ uncompressed payloads.
 
 2. **Original EtherType/port recovery (optional)**: A mechanism to carry the
    original EtherType or UDP port number when the carrier uses the SCHC
-   EtherType or SCHC UDP port.  This is needed when the payload is
+   EtherType or SCHC UDP port. This is needed when the payload is
    decompressed so that the receiver can restore the original framing layer 
    after decompression.
   
@@ -202,8 +202,10 @@ metadata in a single, mechanism-agnostic header.
 # Integration within SCHC framework
 
 VOICI integrates at the carrier layer using the SCHC Ethertype and IP/UDP
-protocol numbers defined in {{SCHC-PROTO-NUMS}}. These values identify VOICI
-traffic on the wire.
+protocol numbers defined in {{SCHC-PROTO-NUMS}}. When multiplexing is required,
+these values identify VOICI traffic on the wire. On deployments where explicit 
+multiplexing is not needed, i.e., provided by the supporting lower layers, VOICI
+is optional. The use of VOICI is part of the Endpoint configuration.
 
 On the sender side, the VOICI module prepends its header to the Datagram and
 replaces the original EtherType, IP Protocol Number, or UDP port number with
@@ -215,8 +217,8 @@ On the receiver side, packets identified by the SCHC Ethertype or IP/UDP
 protocol number are handed to the VOICI dispatcher. The VOICI module parses the
 header, uses the Session ID and CI field to route the Datagram to the correct
 processing handler, strips its own header, and optionally restores the original
-EtherType, IP Protocol Number, or UDP port number before passing the reconstituted
-frame to upper layers.
+EtherType, IP Protocol Number, or UDP port number before passing the 
+reconstituted frame to upper layers.
 
 # Header Format
 
