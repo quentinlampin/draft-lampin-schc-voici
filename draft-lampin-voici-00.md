@@ -36,6 +36,7 @@ normative:
 informative:
   SCHC-ARCH: I-D.ietf-schc-architecture
   SCHC-PROTO-NUMS: I-D.ietf-schc-protocol-numbers
+  RFC9000:
 
   DWARF:
     title: "DWARF Debugging Information Format"
@@ -170,15 +171,33 @@ SCHC traffic at the respective layers but do not provide:
 They are necessary to identify SCHC traffic but insufficient for
 multiplexing.
 
+## QUIC
+
+QUIC {{RFC9000}} is a multiplexed, UDP-based transport that provides stream
+multiplexing, reliability, flow control, and mandatory encryption via TLS
+1.3.  While QUIC satisfies multiplexing and integrity requirements, it is
+generally infeasible for SCHC target deployments:
+
+* QUIC operates exclusively over UDP, requiring a full IP stack. 
+* The mandatory TLS 1.3 handshake and AEAD encryption require cryptographic
+  hardware or sufficient memory that constrained endpoints may not
+  possess.
+* The minimum AEAD ciphertext size (16 bytes for AES-128-GCM) combined
+  with the TLS record and QUIC headers results in a per-packet overhead
+  over 32 bytes.
+
+
 ## Summary
 
-| Mechanism       | Multiplexing | Integrity | Overhead | Link Coverage |
-|-----------------|--------------|-----------|----------|---------------|
-| MPLS            | Yes          | No        | 4+ bytes | Ethernet, IP  |
-| UDP (src port)  | Yes          | No        | 8 bytes  | IP only       |
-| IP Protocol Num | No           | No        | 0 bytes  | IP only       |
-| Ethertype       | No           | No        | 0 bytes  | IEEE 802 only |
-| **VOICI**       | **Yes**      | **Opt.**  | **2 B**  | **Any**       |
+| Mechanism        | Multiplexing | Integrity | Overhead  | Link Coverage |
+|------------------|--------------|-----------|-----------|---------------|
+| Ethertype        | No           | No        | 0 bytes   | IEEE 802 only |
+| MPLS             | Yes          | No        | 4+ bytes  | Ethernet, IP  |
+| IP Protocol Num  | No           | No        | 0 bytes   | IP only       |
+| UDP Protocol Num | No           | Yes       | 8 bytes   | over UDP only |
+| UDP Port         | Yes          | Yes       | 8 bytes   | over UDP only |
+| QUIC             | Yes          | Yes       | 32+ bytes | over QUIC only|
+| **VOICI**        | **Yes**      | **Opt.**  |**2 bytes**| **Any**       |
 {: #tab-gap-summary title="Comparison of multiplexing mechanisms"}
 
 VOICI fills the gap by providing multiplexing, integrity, content mechanism
