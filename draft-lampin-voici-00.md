@@ -154,6 +154,7 @@ UDP is commonly used for Internet traversal and NAT traversal. The UDP
 source port can carry a Session ID:
 
 * The UDP header is 8 bytes.
+* Features a 16 bits Checksum.
 * Using the UDP source port as Session ID is fragile in the presence of
   NAT (port remapping) and port exhaustion (65535 limit shared with
   other applications).
@@ -244,15 +245,15 @@ reconstituted frame to upper layers.
 ~~~
 0                   1                   2
 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3   bits
-+-+-+-+---------+---------------- - - - - - - - +
-|V|O|I|    CI   |         Session ID            | (1B if <128 else 2)
-+-+-+-+---------+---------------- - - - - - - - +
-+- - - - - - - - - - - - - - - -+
-|              CRC              | (optional, present if I=1)
-+- - - - - - - - - - - - - - - -+
-+- - - - - - - - - - - - - - - -+ (optional, present if O=1,
-|    Original EtherType/Port    |  2B for Ethertype or UDP port,
-+- - - - - - - - - - - - - - - -+  1B for IPv6 Next Header)
++-+-+-+--------+---------------- - - - - - - - +
+|V|O|I|    CI  |         Session ID            | (1B if <128 else 2)
++-+-+-+--------+---------------- - - - - - - - +
++- - - - - - - - - - - - - - - +
+|              CRC             | (optional, present if I=1)
++- - - - - - - - - - - - - - - +
++- - - - - - - - - - - - - - - + (optional, present if O=1,
+|    Original EtherType/Port   |  2B for Ethertype or UDP port,
++- - - - - - - - - - - - - - - +  1B for IPv6 Next Header)
 ~~~
 {: #fig-lmx-header title="VOICI Header"}
 
