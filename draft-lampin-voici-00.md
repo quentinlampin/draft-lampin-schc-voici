@@ -174,7 +174,7 @@ multiplexing.
 
 | Mechanism       | Multiplexing | Integrity | Overhead | Link Coverage |
 |-----------------|--------------|-----------|----------|---------------|
-| MPLS            | Yes          | No        | 4+ bytes | Limited       |
+| MPLS            | Yes          | No        | 4+ bytes | Ethernet, IP  |
 | UDP (src port)  | Yes          | No        | 8 bytes  | IP only       |
 | IP Protocol Num | No           | No        | 0 bytes  | IP only       |
 | Ethertype       | No           | No        | 0 bytes  | IEEE 802 only |
