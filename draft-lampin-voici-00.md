@@ -369,7 +369,7 @@ VOICI header sizes for various configurations (SID < 128 vs SID >= 128):
 | + CRC                       | 0 | 0 | 1 | 4 B       | 5 B        |
 | + Orig. EtherType/UDP Port  | 0 | 1 | 0 | 4 B       | 5 B        |
 | + Orig. IP Next Header      | 0 | 1 | 0 | 3 B       | 4 B        |
-| All fields                  | 0 | 1 | 1 | 5-6 B     | 6-7 B        |
+| All fields                  | 0 | 1 | 1 | 5-6 B     | 6-7 B      |
 {: #tab-header-size title="VOICI header size summary"}
 
 ## Header Field Reference
