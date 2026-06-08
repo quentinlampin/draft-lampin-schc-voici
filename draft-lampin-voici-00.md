@@ -243,17 +243,17 @@ reconstituted frame to upper layers.
 # Header Format
 
 ~~~
-0                   1                   2
-0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3   bits
-+-+-+-+--------+---------------- - - - - - - - +
-|V|O|I|    CI  |         Session ID            | (1B if <128 else 2)
-+-+-+-+--------+---------------- - - - - - - - +
-+- - - - - - - - - - - - - - - +
-|              CRC             | (optional, present if I=1)
-+- - - - - - - - - - - - - - - +
-+- - - - - - - - - - - - - - - + (optional, present if O=1,
-|    Original EtherType/Port   |  2B for Ethertype or UDP port,
-+- - - - - - - - - - - - - - - +  1B for IPv6 Next Header)
+ 0                   1                   2
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3   bits
++-+-+-+---------+---------------- - - - - - - - +
+|V|O|I|    CI   |         Session ID            | (1B if <128 else 2)
++-+-+-+---------+---------------- - - - - - - - +
++- - - - - - - - - - - - - - - -+
+|              CRC              | (optional, present if I=1)
++- - - - - - - - - - - - - - - -+
++- - - - - - - - - - - - - - - -+ (optional, present if O=1,
+|    Original EtherType/Port    |  2B for Ethertype or UDP port,
++- - - - - - - - - - - - - - - -+  1B for IPv6 Next Header)
 ~~~
 {: #fig-lmx-header title="VOICI Header"}
 
@@ -333,15 +333,17 @@ its parameters.
   bit of each byte: if the MSB is 1, the next byte is part of the value;
   if 0, the byte is the last.
 
+
+* **CRC (16 bits, optional):**  Present when I=1.  CRC-16/CCITT-FALSE
+   over the flag byte (V-O-I-CI), the Session ID, the Original
+   EtherType/Port field (if O=1), and the entire Datagram payload.
+
 * **Original EtherType/Port (1-2 bytes, optional):**  Present when O=1.
   Carries the EtherType or UDP port number that was replaced by the VOICI
   carrier.  The field is interpreted as an EtherType when VOICI is carried
   over a link-layer transport (for example, IEEE 802 Ethertype) and as a
   UDP port when VOICI is carried in a UDP payload.
 
-* **CRC (16 bits, optional):**  Present when I=1.  CRC-16/CCITT-FALSE
-   over the flag byte (V-O-I-CI), the Session ID, the Original
-   EtherType/Port field (if O=1), and the entire Datagram payload.
 
 ## Minimal Header
 
@@ -349,8 +351,8 @@ When no optional fields are needed (V=0, O=0, I=0), the VOICI header
 reduces to 2-3 bytes (flag byte + 1-2 byte Session ID):
 
 ~~~
-0                   1
-0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5   bits
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5   bits
 +-+-+-+---------+---------------+
 |V|O|I|    CI   |  Session ID   | (SID < 128: 2 bytes)
 +-+-+-+---------+---------------+
@@ -361,12 +363,13 @@ reduces to 2-3 bytes (flag byte + 1-2 byte Session ID):
 
 VOICI header sizes for various configurations (SID < 128 vs SID >= 128):
 
-| Configuration           | V | O | I | SID < 128 | SID >= 128 |
-|-------------------------|---|---|---|-----------|------------|
-| Session ID only         | 0 | 0 | 0 | 2 B       | 3 B        |
-| + CRC                   | 0 | 0 | 1 | 4 B       | 5 B        |
-| + Orig. EtherType/Port  | 0 | 1 | 0 | 4 B       | 5 B        |
-| All fields              | 0 | 1 | 1 | 6 B       | 7 B        |
+| Configuration               | V | O | I | SID < 128 | SID >= 128 |
+|-----------------------------|---|---|---|-----------|------------|
+| Session ID only             | 0 | 0 | 0 | 2 B       | 3 B        |
+| + CRC                       | 0 | 0 | 1 | 4 B       | 5 B        |
+| + Orig. EtherType/UDP Port  | 0 | 1 | 0 | 4 B       | 5 B        |
+| + Orig. IP Next Header      | 0 | 1 | 0 | 3 B       | 4 B        |
+| All fields                  | 0 | 1 | 1 | 5-6 B     | 6-7 B        |
 {: #tab-header-size title="VOICI header size summary"}
 
 ## Header Field Reference
