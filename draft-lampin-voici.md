@@ -245,9 +245,9 @@ reconstituted frame to upper layers.
 ~~~
  0                   1                   2
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3   bits
-+-+-+-+---+-----+---------------- - - - - - - - +
-|V|O|I|CI | SSS |         Session ID (long)     | (if SSS=7, 2 bytes total)
-+-+-+-+---+-----+---------------- - - - - - - - +
++-+-+-+---+-----+ - - - - - - - - - - - - - - - +
+|V|O|I|CI | SSS |         Session ID (long)     |
++-+-+-+---+-----+ - - - - - - - - - - - - - - - +
 +- - - - - - - - - - - - - - - -+
 |              CRC              | (optional, present if I=1)
 +- - - - - - - - - - - - - - - -+
@@ -320,12 +320,12 @@ The Datagram payload follows immediately after the last header field.
 
   The initial CI assignments are:
 
-| CI   | Content Mechanism                                                |
-|------|------------------------------------------------------------------|
-| 0    | Unprocessed / raw                                                |
-| 1    | SCHC                                                             |
-| 2    | Reserved for future mechanisms                                   |
-| 3    | Extended CI                                                      |
+| CI   | Content Mechanism              |
+|------|--------------------------------|
+| 0    | Unprocessed / raw              |
+| 1    | SCHC                           |
+| 2    | Reserved for future mechanisms |
+| 3    | Extended CI                    |
 {: #tab-ci-initial title="Initial CI assignments"}
 
 Profiles that register a new CI value MUST specify the mechanism and
@@ -335,7 +335,7 @@ its parameters.
   Extended CI value (for Extended CI).  The SSS field uses an inline/extended
   encoding:
 
-  * **SSS in [0..6]:** The value is inlined in the first byte.
+  * **SSS in 0..6:** The value is inlined in the first byte.
     - For Unprocessed/Raw or SCHC: `SID = SSS`.  Header is 1 byte
       (unless O=1 or I=1).
     - For Extended CI: `Ext_CI = SSS + 3`.  A Session ID follows as a

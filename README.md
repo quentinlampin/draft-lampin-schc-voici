@@ -4,7 +4,7 @@ This repository contains the draft "VOICI" by Quentin Lampin (Orange).
 
 ## Abstract
 
-A minimal, general-purpose link multiplexer for constrained networks. Provides session multiplexing, content dispatch, and optional integrity protection with a 2-byte minimum overhead. Works with SCHC and other compression mechanisms.
+A minimal, general-purpose link multiplexer for constrained networks. Provides session multiplexing, content dispatch, and optional integrity protection with a 1-byte minimum overhead (for inline Session IDs 0–6). Works with SCHC and other compression mechanisms.
 
 ## Building the Draft
 
