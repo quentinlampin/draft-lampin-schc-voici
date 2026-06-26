@@ -3,7 +3,7 @@ v: 3
 
 title: VOICI
 abbrev: VOICI
-docname: draft-lampin-voici-00
+docname: draft-lampin-voici-01
 submissionType: IETF
 
 
@@ -255,7 +255,7 @@ reconstituted frame to upper layers.
 |    Original EtherType/Port    |  2B for Ethertype or UDP port,
 +- - - - - - - - - - - - - - - -+  1B for IPv6 Next Header)
 ~~~
-{: #fig-lmx-header title="VOICI Header"}
+{: #fig-voici-header title="VOICI Header"}
 
 The V-O-I flags (3 bits), CI field (5 bits), and the Session ID (1-2 bytes) are
 always present.  The CRC (2 bytes) is present when I=1.  The Original
@@ -279,8 +279,8 @@ The Datagram payload follows immediately after the last header field.
 
 ## Fields
 
-* **V (1 bit):**  VOICI header format version.  V=0 for this draft.  V=1
-  for future VOICI revisions.
+* **V (1 bit):**  VOICI header format version.  V=0 for this draft. V=1 for 
+  future VOICI revisions.
 
 * **O (1 bit):**  Original EtherType/Port present.  When set, the Original
   EtherType/Port field is present, carrying the EtherType, IP Next Header,
@@ -296,16 +296,16 @@ The Datagram payload follows immediately after the last header field.
   covers the Session ID through the end of the datagram.  When clear, no
   integrity check is carried.
 
-* **CI (5 bits):**  Content Identifier.  Identifies the mechanism used for
-  the datagram payload.  The mechanism profile defines the interpretation
-  of each CI value.  VOICI profiles register new CI values as needed.
+* **CI (5 bits):**  Content Identifier. Identifies the mechanism used for
+  the datagram payload. The mechanism profile defines the interpretation
+  of each CI value. VOICI profiles register new CI values as needed.
 
   The initial CI assignments are:
 
 | CI   | Content Mechanism                                                |
 |------|------------------------------------------------------------------|
 | 0    | Unprocessed / raw -- Datagram requiring no reconstruction; used for minimalistic multiplexing only |
-| 1    | SCHC -- standard SCHC compressed residue                          |
+| 1    | SCHC -- standard SCHC compressed residue                         |
 | 2-31 | Reserved for future mechanisms                                   |
 {: #tab-ci-initial title="Initial CI assignments"}
 
@@ -325,8 +325,7 @@ its parameters.
   ID is encoded as a LEB128 variable-length integer {{DWARF}}:
 
   * If the value is less than 128, a single byte is used (MSB = 0).
-  * If the value is 128 or greater, two bytes are used (first byte
-    MSB = 1).
+  * If the value is 128 or greater, two bytes are used (first byte MSB = 1).
   * No values larger than 16 bits (65535) are supported.
 
   The receiver reads the Session ID by inspecting the most significant
@@ -357,7 +356,7 @@ reduces to 2-3 bytes (flag byte + 1-2 byte Session ID):
 |V|O|I|    CI   |  Session ID   | (SID < 128: 2 bytes)
 +-+-+-+---------+---------------+
 ~~~
-{: #fig-lmx-minimal title="Minimal VOICI Header (2-3 bytes)"}
+{: #fig-voici-minimal title="Minimal VOICI Header (2-3 bytes)"}
 
 ## Header Size Summary
 
