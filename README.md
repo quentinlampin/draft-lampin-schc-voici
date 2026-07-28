@@ -29,7 +29,7 @@ make clean     # Remove generated files
 
 ## Files
 
-- `draft-lampin-voici-00.md` - Main draft source in Markdown format
+- `draft-lampin-schc-voici.md` - Main draft source in Markdown format
 - `Makefile` - Build automation
 
 ## License

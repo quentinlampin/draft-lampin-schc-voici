@@ -3,7 +3,7 @@ v: 3
 
 title: VOICI
 abbrev: VOICI
-docname: draft-lampin-voici-03
+docname: draft-lampin-schc-voici-00
 submissionType: IETF
 
 

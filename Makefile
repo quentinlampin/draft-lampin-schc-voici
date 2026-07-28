@@ -1,7 +1,7 @@
 # Makefile for IETF draft generation using kramdown-rfc and xml2rfc
 
 # Variables
-DRAFT_NAME = draft-lampin-voici
+DRAFT_NAME = draft-lampin-schc-voici
 MARKDOWN_FILE = $(DRAFT_NAME).md
 XML_FILE = $(DRAFT_NAME).xml
 TXT_FILE = $(DRAFT_NAME).txt
