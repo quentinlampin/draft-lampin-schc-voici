@@ -280,6 +280,9 @@ correct processing handler, strips its own header, and optionally restores the
 original EtherType, IP Protocol Number, or UDP port number before passing the 
 reconstituted frame to upper layers.
 
+The detailed processing procedures are specified in
+{{section-voici-operation}}.
+
 # Header Format
 
 ~~~
@@ -325,16 +328,19 @@ The Data Unit follows immediately after the last header field.
       - If SSS == 7: read a LEB128 integer from following byte(s);
         `Ext_CI = LEB128_val + 10`.
    b. Read the Session ID as a LEB128 integer from the following byte(s).
-5. If I=1, read 2-byte CRC and compute expected CRC over all bytes read so
-   far (flag byte, Extended CI bytes if CI=3, Session ID), Original
-   EtherType/Port (if O=1), and the Data Unit payload; drop frame if CRC is
+5. If I=1, read the 2-byte CRC value.
+6. If O=1, read the Original EtherType/Port field (2 bytes for
+   Ethernet/UDP, 1 byte for IPv6 Next Header).
+7. If I=1, compute the expected CRC over all preceding bytes read so
+   far (flag byte, Extended CI bytes if CI=3, Session ID, Original
+   EtherType/Port if O=1), and the Data Unit payload.  The CRC field
+   appears before the Original EtherType/Port on the wire but covers it;
+   the receiver reads both before verifying.  Drop frame if CRC is
    invalid.
-6. If O=1, read Original EtherType/Port field (2 bytes for Ethernet/UDP,
-   1 byte for IPv6 Next Header).
-7. Pass remaining buffer to the identified handler and recover
+8. Pass remaining buffer to the identified handler and recover
    original/content.
-8. If O=1, restore original Ethertype or Port number and return processed frame
-   to original handler.
+9. If O=1, restore original EtherType or Port number and return
+   processed frame to original handler.
 
 ## Fields
 
@@ -473,6 +479,149 @@ growing to 6 bytes (SSS=7 with 2-byte LEB128 Ext_CI + 2-byte LEB128 SID).
 | Original ET/Port  | 1-2 B  | EtherType, Next Header, or UDP port (if O=1)  |
 | CRC               | 2 B    | Integrity check (if I=1)                      |
 {: #tab-header-fields title="VOICI header field summary"}
+
+
+# VOICI Operation
+
+This section specifies the normative processing procedures for the VOICI
+module on both the transmit (egress) and receive (ingress) paths.
+
+## Transmit Path (Egress)
+
+On the sender side, VOICI operates as an encapsulator.  A Data Unit is
+passed to the VOICI module by an upper-layer handler together with
+metadata that determines the header fields.  The inputs are:
+
+
+- the **Data Unit** (payload), which may be compressed (for example, an
+  SCHC residue), unprocessed, or encoded by another mechanism;
+- a **Session ID**, identifying the logical session that owns the Data
+  Unit;
+- a **Content Identifier**, indicating the mechanism that encoded the
+  Data Unit;
+- an **Original Framing** value (EtherType, IP Next Header, or UDP port)
+  when the carrier framing has been replaced by the VOICI carrier and
+  the receiver must restore it;
+- an **Integrity** flag indicating whether a CRC is required.
+
+The VOICI module constructs the header as follows:
+
+1. **V field**: Set to 0 (current version).
+
+2. **O field**: Set to 1 if an Original Framing value is provided and
+   must be carried to the receiver for restoration; otherwise set to 0.
+
+3. **I field**: Set to 1 if integrity protection is required; otherwise
+   set to 0.
+
+4. **CI field**: Set to the Content Identifier associated with the Data
+   Unit.  For Unprocessed/Raw traffic, CI=0.  For SCHC-compressed
+   traffic, CI=1.  For mechanisms registered under Extended CI, CI=3
+   (see below).
+
+5. **SSS field and Session ID**:
+   - For CI=0 (Unprocessed/Raw) or CI=1 (SCHC):
+     - If Session ID is in the range 0-6: set SSS to the Session ID
+       value (inline encoding).  No additional Session ID bytes are
+       emitted.
+     - If Session ID is 7 or greater: set SSS to 7.  Encode
+       `Session ID - 7` as a LEB128 integer following the first byte.
+   - For CI=3 (Extended CI):
+     - The SSS field encodes the Extended CI value rather than the
+       Session ID.  If the Extended CI value is in the range 3-9: set
+       SSS to `Extended CI - 3` (inline).  Otherwise: set SSS to 7 and
+       encode `Extended CI - 10` as a LEB128 integer following the
+       first byte.
+     - After the Extended CI value (inline or LEB128), encode the
+       Session ID as a LEB128 integer.
+
+6. **CRC field** (if I=1): Compute CRC-16/CCITT-FALSE over the
+   following bytes in wire order: the base header byte (V-O-I-CI-SSS),
+   any Extended CI LEB128 bytes, the Session ID bytes, the Original
+   EtherType/Port value (if O=1), and the entire Data Unit payload.
+   The CRC field itself is NOT included in the computation.  Append the
+   2-byte CRC field.
+
+7. **Original EtherType/Port field** (if O=1): Append the Original
+   Framing value.  For Ethernet or UDP carriers, the field is 2 bytes
+   (EtherType or UDP port).  For IPv6, the field is 1 byte (Next
+   Header value).
+
+8. **Prepend** the complete VOICI header to the Data Unit to form the
+   VOICI-encapsulated frame.
+
+9. **Carrier framing**: Replace the outgoing frame's carrier identifier
+   (EtherType, IP Protocol Number, or UDP port) with the VOICI carrier
+   value defined in {{SCHC-PROTO-NUMS}}.
+
+10. Submit the encapsulated frame to lower layers for transmission.
+
+## Receive Path (Ingress)
+
+On the receiver side, VOICI operates as a dispatcher.  Frames arriving
+with the VOICI Ethertype, IP Protocol Number, or UDP port
+({{SCHC-PROTO-NUMS}}) are handed to the VOICI module.  Processing is as
+follows:
+
+1. **Parse the base header**: Read the first byte; extract V, O, I, CI,
+   and SSS.
+
+2. **Version check**: If V indicates a version other than 0, the header
+   format is unsupported.  The frame MUST be discarded.
+
+3. **Reserved CI check**: If CI=2 (Reserved), the Data Unit MUST be
+   discarded.
+
+4. **Decode SSS**:
+   - For CI=0 (Unprocessed/Raw) or CI=1 (SCHC):
+     - If SSS is 0-6: Session ID equals SSS.
+     - If SSS is 7: read a LEB128 integer from the following byte(s);
+       Session ID equals `LEB128_val + 7`.
+   - For CI=3 (Extended CI):
+     - If SSS is 0-6: Extended CI equals `SSS + 3`.
+     - If SSS is 7: read a LEB128 integer; Extended CI equals
+       `LEB128_val + 10`.
+     - Read the Session ID as a LEB128 integer from the bytes
+       following the Extended CI value (or following the first byte,
+       if SSS was 0-6).
+
+5. **Read CRC field** (if I=1): Read the 2-byte CRC value.
+
+6. **Read Original EtherType/Port field** (if O=1): Read the Original
+   EtherType/Port field.  The field is 2 bytes for Ethernet/UDP carriers,
+   1 byte for IPv6 Next Header.
+
+7. **CRC verification** (if I=1): Compute the expected CRC over all
+   preceding bytes (base header byte, Extended CI bytes if CI=3, Session ID
+   bytes, Original EtherType/Port if O=1), and the Data Unit payload.
+   Note that the CRC field appears before the Original EtherType/Port
+   field on the wire but covers it; the receiver reads both fields before
+   verifying.  If the computed CRC does not match the received CRC, the
+   frame MUST be discarded.
+
+8. **Dispatch**: Pass the Data Unit payload to the processing handler
+   identified by the CI value and Session ID.  For CI=1 (SCHC), the
+   handler is the SCHC Instance corresponding to that Session ID.
+   For CI=0 (Unprocessed/Raw), the handler is the raw dispatch path.
+
+9. **Handler processing**: The handler processes the Data Unit
+   (decompression, pass-through, etc.) and returns the result to VOICI.
+
+10. **Restore original framing** (if O=1): Write the Original
+    EtherType/Port value read in step 6 into the carrier framing of the
+    outgoing frame (EtherType, IP Next Header, or UDP port as
+    appropriate).
+
+11. **Egress to upper layers**: Pass the reconstituted frame to the
+    appropriate upper-layer handler. If O=1, the upper-layer handler is the
+    one identified by the reconstructed carrier header.
+
+## Error Handling
+
+If the receiver cannot identify a handler for a given (CI, Session ID)
+pair -- for example, the Session ID is not associated with any
+configured handler, or the CI value is not supported -- the frame MUST
+be discarded.
 
 
 # Session ID Allocation
