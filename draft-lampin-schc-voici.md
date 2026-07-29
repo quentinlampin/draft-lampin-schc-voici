@@ -3,7 +3,7 @@ v: 3
 
 title: VOICI
 abbrev: VOICI
-docname: draft-lampin-schc-voici-00
+docname: draft-lampin-schc-voici-latest
 submissionType: IETF
 
 
@@ -280,8 +280,7 @@ correct processing handler, strips its own header, and optionally restores the
 original EtherType, IP Protocol Number, or UDP port number before passing the 
 reconstituted frame to upper layers.
 
-The detailed processing procedures are specified in
-{{section-voici-operation}}.
+The detailed processing procedures are specified in {{section-voici-operation}}.
 
 # Header Format
 
@@ -481,7 +480,7 @@ growing to 6 bytes (SSS=7 with 2-byte LEB128 Ext_CI + 2-byte LEB128 SID).
 {: #tab-header-fields title="VOICI header field summary"}
 
 
-# VOICI Operation
+# VOICI Operation {#section-voici-operation}
 
 This section specifies the normative processing procedures for the VOICI
 module on both the transmit (egress) and receive (ingress) paths.
