@@ -21,9 +21,7 @@ uv tool install xml2rfc
 ### Building
 
 ```bash
-make           # Generate TXT, HTML, XML
-make complete  # All formats including PDF
-make validate  # Validate XML
+make           # Generate TXT, HTML, XML, PDF, MD
 make clean     # Remove generated files
 ```
 

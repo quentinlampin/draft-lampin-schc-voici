@@ -1,0 +1,831 @@
+---
+v: 3
+
+title: VOICI
+abbrev: VOICI
+docname: draft-lampin-schc-voici-latest
+submissionType: IETF
+
+
+stand_alone: true
+
+ipr: trust200902
+area: Internet
+wg: SCHC Working Group
+keyword: []
+category: info
+
+
+coding: us-ascii
+
+author:
+  -
+    ins: Q. Lampin
+    name: Quentin Lampin
+    org: Orange
+    street: Orange 3 Massifs - 22 Chemin du Vieux Chene
+    city: Meylan
+    code: 38240
+    country: France
+    email: quentin.lampin@orange.com
+
+normative:
+  RFC8126:
+  SCHC: RFC8724
+
+informative:
+  SCHC-ARCH: I-D.ietf-schc-architecture
+  SCHC-PROTO-NUMS: I-D.ietf-schc-protocol-numbers
+  RFC9000:
+
+  DWARF:
+    title: "DWARF Debugging Information Format"
+    author:
+      - org: Dwarf Standards Committee
+    date: false
+    target: https://dwarfstd.org/documentation/
+    seriesinfo:
+      Web: https://dwarfstd.org/documentation/
+
+
+--- abstract
+
+The Static Context Header Compression (SCHC) framework identified the need for
+a minimal transport encapsulation that provides Session multiplexing when
+extrinsic Discriminators are insufficient.  This document specifies a Link
+Multiplexer (VOICI) that addresses those SCHC-driven requirements while
+remaining general enough to accommodate other compression mechanisms and
+uncompressed payloads.  The encapsulation is designed for minimal overhead,
+reducing to 1 byte in the common case (7 inline Session IDs), while supporting
+optional integrity protection and original EtherType/port recovery.
+
+--- middle
+
+# Introduction
+
+The SCHC framework {{SCHC}} provides header compression and optional
+fragmentation based on static contexts shared between Endpoints.  In the
+common deployment -- a single Instance per Endpoint over a single link --
+the mapping between the link and the Instance is trivial: all Data Units on
+the link belong to that one Instance, and no multiplexing mechanism is
+needed.
+
+However, two deployment scenarios require a mechanism to distinguish
+multiple Sessions over a shared link:
+
+* An Endpoint hosts multiple Instances serving different Domains or tenants.
+* Multiple Sessions share an Ethernet segment or IPv6 link.
+
+These requirements were first identified by the SCHC architecture
+{{SCHC-ARCH}} for the case of SCHC-compressed Data Units.  But the need is
+broader than SCHC alone.  Operator and industrial deployments often carry
+a mix of traffic types on the same constrained link: SCHC-compressed
+Data Units from devices that use static Contexts; Data Units from other
+mechanisms; and uncompressed management or diagnostic traffic that bypasses
+compression.  In all of these cases, transport-level multiplexing, and
+optional integrity are desirable.
+
+This document specifies a Link Multiplexer (VOICI) that satisfies the
+requirements identified for SCHC while remaining general enough for other
+compression mechanisms.  The VOICI header carries a Session ID for
+multiplexing, a Content Identifier for dispatching the Data Unit to the
+correct handler, and optional integrity protection.  The encapsulation is
+designed for minimal overhead, reducing to 1 byte in the common case
+(inline Session IDs 0-6 with 2-bit Content Identifier).
+
+{::boilerplate bcp14}
+
+# Requirements
+
+## Key problem solved by VOICI
+
+
+~~~
+                              Endpoint
+                  +---------------------------------+
+                  |                                 |
+      Session A   |                                 |   Session B
+                  | +------------+   +------------+ |
+                  | | Instance A |   | Instance B | |
+                  | +------------+   +------------+ |
+                  |        ^               ^        |
+                  |        |               |        |
+                  |        +-------+-------+        |
+                  |                |    how to      |
+                  |                | discriminate?  |
+                  |                |                |
+                  +----------------|----------------+
+                                   |
+                                   |
+                                   |
++----------------------------+----------------+ 
+| Lower Layer headers        | SCHC Data Unit |
+| no content discriminating  | e.g. Rule ID + |
+|       Sessions A&B         |   residue      |
++----------------------------+----------------+
+    
+~~~
+{: #fig-voici-problem title="Key problem solved by VOICI"}
+{{fig-voici-problem}} illustrates the fundamental problem addressed by
+VOICI.  When an Endpoint hosts multiple SCHC Instances -- each serving
+a different Domain, tenant, or application -- their compressed Data Units
+must share a single link.  The lower layer headers (Ethernet, IPv6, etc.)
+carry no information to distinguish which Instance a Data Unit belongs to,
+because the compression residue elides those distinguishing fields.
+Without an explicit discriminator, the receiver cannot route the incoming
+Data Unit to the correct handler.  VOICI solves this by prepending a
+compact header that carries a Session ID, bridging the gap between the
+compression layer and the link layer.
+
+
+The requirements below are organized into two groups.  Requirements 1-3 were
+first identified by the SCHC architecture {{SCHC-ARCH}} for the specific
+case of SCHC-compressed Data Units.  Requirements 4-5 were added when the
+scope was broadened to encompass other compression mechanisms and
+uncompressed payloads.
+
+## Requirements driven by SCHC
+
+1. **Session identification**: A mechanism to distinguish Sessions and
+   route Data Units to the correct processing handler (for example, a SCHC
+   Instance).  The identifier (Session ID) is locally significant to the
+   link.
+
+2. **Original EtherType/port recovery (optional)**: A mechanism to carry the
+   original EtherType or UDP port number when the carrier uses the SCHC
+   EtherType or SCHC UDP port. This is needed when the payload is
+   decompressed so that the receiver can restore the original framing layer 
+   after decompression.
+  
+3. **Integrity protection (optional)**: A mechanism to detect corruption
+   of the Data Unit, including the Session ID and the compressed residue.
+
+## Requirements driven by multi-mechanism and uncompressed payloads
+
+4. **Content identification**: A mechanism to identify how the Data Unit
+   is encoded when the link carries Data Units from multiple mechanisms 
+   (for example, SCHC, uncompressed).  This allows the receiver
+   to dispatch the Data Unit to the correct decompressor without inspecting
+   its contents.
+
+5. **Layer independence**: The encapsulation MUST operate over any link
+   layer that carries compressed traffic, whether identified by an
+   Ethertype, IP Protocol Number, or UDP port {{SCHC-PROTO-NUMS}}.
+
+# Gap Analysis
+
+Several existing mechanisms can provide multiplexing or labeling. This
+section analyzes their suitability for SCHC and identifies the gap that
+VOICI fills.
+
+## MPLS
+
+MPLS labels provide efficient multiplexing and are
+widely deployed in operator networks.  However:
+
+* MPLS adds 4 bytes per label, which may
+  be excessive for highly constrained deployments.
+* MPLS is not available on all link types relevant to SCHC (LPWAN, PPP,
+  low-speed serial links).
+* MPLS provides no integrity protection.
+
+## UDP Encapsulation
+
+UDP is commonly used for Internet traversal and NAT traversal. The UDP
+source port can carry a Session ID:
+
+* The UDP header is 8 bytes.
+* Features a 16 bits Checksum.
+* Using the UDP source port as Session ID is fragile in the presence of
+  NAT (port remapping) and port exhaustion (65535 limit shared with
+  other applications).
+* UDP is only available above IP.
+
+## IP Protocol Number and SCHC Ethertype
+
+The SCHC IP Protocol Number and Ethertype {{SCHC-PROTO-NUMS}} identify
+SCHC traffic at the respective layers but do not provide:
+
+* Session multiplexing (one protocol number or Ethertype per link, not
+  per Session).
+* Integrity protection.
+
+They are necessary to identify SCHC traffic but insufficient for
+multiplexing.
+
+## QUIC
+
+QUIC {{RFC9000}} is a multiplexed, UDP-based transport that provides stream
+multiplexing, reliability, flow control, and mandatory encryption via TLS
+1.3.  While QUIC satisfies multiplexing and integrity requirements, it is
+generally infeasible for SCHC target deployments:
+
+* QUIC operates exclusively over UDP, requiring a full IP stack. 
+* The mandatory TLS 1.3 handshake and AEAD encryption require cryptographic
+  hardware or sufficient memory that constrained endpoints may not
+  possess.
+* The minimum AEAD ciphertext size (16 bytes for AES-128-GCM) combined
+  with the TLS record and QUIC headers results in a per-packet overhead
+  over 32 bytes.
+
+
+## Summary
+
+| Mechanism        | Multiplexing | Integrity | Overhead  | Link Coverage |
+|------------------|--------------|-----------|-----------|---------------|
+| Ethertype        | No           | No        | 0 bytes   | IEEE 802 only |
+| MPLS             | Yes          | No        | 4+ bytes  | Ethernet, IP  |
+| IP Protocol Num  | No           | No        | 0 bytes   | IP only       |
+| UDP Port         | Yes          | Yes       | 8 bytes   | over UDP only |
+| QUIC             | Yes          | Yes       | 32+ bytes | over QUIC only|
+| **VOICI**        | **Yes**      | **Opt.**  |**1 byte** | **Any**       |
+{: #tab-gap-summary title="Comparison of multiplexing mechanisms"}
+
+VOICI fills the gap by providing multiplexing, integrity, content mechanism
+identification, and original EtherType/port recovery with minimal
+overhead.  The comparison is summarized in {{tab-gap-summary}}.
+
+## Encoding Within SCHC Data Unit
+
+Encoding session or version information inside the SCHC rules or rule
+results would couple transport-layer concerns (multiplexing, version
+negotiation) to compression-layer concerns (what to compress, how to parse
+the residue).  A separate encapsulation keeps the SCHC Data Unit focused on
+compression results and allows the transport header to be added or removed
+without modifying the compression strategy or the Context/Rules.
+
+Furthermore, when multiple compression mechanisms share the same link, an
+inner-field approach would require every mechanism to reserve space for the
+same routing metadata, reducing compression efficiency. VOICI places this
+metadata in a single, mechanism-agnostic header.
+
+# Integration within SCHC framework
+
+VOICI integrates at the carrier layer using the SCHC Ethertype and IP/UDP
+protocol numbers defined in {{SCHC-PROTO-NUMS}}. When multiplexing is required,
+these values identify VOICI traffic on the wire. On deployments where explicit 
+multiplexing is not needed, i.e., provided by the supporting lower layers, VOICI
+is optional. The use of VOICI is part of the Endpoint configuration.
+
+On the sender side, the VOICI module prepends its header to the Data Unit and
+replaces the original EtherType, IP Protocol Number, or UDP port number with
+the corresponding SCHC Ethertype or IP/UDP protocol number.  If the original
+framing information must be preserved for later restoration, the Original
+EtherType/Port flag (O) is set and the field is populated.
+
+On the receiver side, packets identified by the SCHC Ethertype or IP/UDP
+protocol number are handed to the VOICI dispatcher. The VOICI module parses the
+header, uses the Session ID and CI field to route the Protocol Data Unit to the 
+correct processing handler, strips its own header, and optionally restores the 
+original EtherType, IP Protocol Number, or UDP port number before passing the 
+reconstituted frame to upper layers.
+
+The detailed processing procedures are specified in {{section-voici-operation}}.
+
+# Header Format
+
+~~~
+ 0                   1                   2
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3   bits
++-+-+-+---+-----+ - - - - - - - - - - - - - - - +
+|V|O|I|CI | SSS |         Session ID (long)     |
++-+-+-+---+-----+ - - - - - - - - - - - - - - - +
++- - - - - - - - - - - - - - - -+
+|              CRC              | (optional, present if I=1)
++- - - - - - - - - - - - - - - -+
++- - - - - - - - - - - - - - - -+ (optional, present if O=1,
+|    Original EtherType/Port    |  2B for Ethertype or UDP port,
++- - - - - - - - - - - - - - - -+  1B for IPv6 Next Header)
+~~~
+{: #fig-voici-header title="VOICI Header"}
+
+The V-O-I flags (3 bits), CI field (2 bits), and the SSS field (3 bits) are
+always present.  The `SSS` field uses a uniform encoding rule: values 0-6
+represent an inlined value in the first byte, while 7 triggers a LEB128
+variable-length integer in the following byte(s) with offset +7.  For
+Unprocessed/Raw and SCHC, SSS encodes the Session ID (`SID = SSS` or
+`SID = LEB128_val + 7`).  For the Extended CI mechanism, SSS encodes the
+Extended CI value.  For Reserved CI values, the interpretation is defined by
+the future profile.  The CRC (2 bytes) is present when I=1.  The Original
+EtherType/Port (1-2 bytes) is present when O=1.
+
+The Data Unit follows immediately after the last header field.
+
+**Parsing order:**
+
+1. Read byte 0; extract V, O, I, CI, SSS.
+2. If CI indicates Reserved:
+   a. The Data Unit MUST be discarded.
+3. If CI indicates Unprocessed/Raw or SCHC (CI in {0, 1}):
+   a. Decode SSS as the Session ID:
+      - If SSS < 7: `SID = SSS` (1-byte header).
+      - If SSS == 7: read a LEB128 integer from following byte(s);
+        `SID = LEB128_val + 7`.
+4. If CI indicates Extended CI (CI == 3):
+   a. Decode SSS as the Extended CI value:
+      - If SSS < 7: `Ext_CI = SSS + 3` (1-byte header so far).
+      - If SSS == 7: read a LEB128 integer from following byte(s);
+        `Ext_CI = LEB128_val + 10`.
+   b. Read the Session ID as a LEB128 integer from the following byte(s).
+5. If I=1, read the 2-byte CRC value.
+6. If O=1, read the Original EtherType/Port field (2 bytes for
+   Ethernet/UDP, 1 byte for IPv6 Next Header).
+7. If I=1, compute the expected CRC over all preceding bytes read so
+   far (flag byte, Extended CI bytes if CI=3, Session ID, Original
+   EtherType/Port if O=1), and the Data Unit payload.  The CRC field
+   appears before the Original EtherType/Port on the wire but covers it;
+   the receiver reads both before verifying.  Drop frame if CRC is
+   invalid.
+8. Pass remaining buffer to the identified handler and recover
+   original/content.
+9. If O=1, restore original EtherType or Port number and return
+   processed frame to original handler.
+
+## Fields
+
+* **V (1 bit):**  VOICI header format version.  V=0 for this draft. V=1 for 
+  future VOICI revisions.
+
+* **O (1 bit):**  Original EtherType/Port present.  When set, the Original
+  EtherType/Port field is present, carrying the EtherType, IP Next Header,
+  or UDP port number that was replaced by the VOICI EtherType, VOICI IP
+  Protocol Number, or VOICI UDP port.  The field is interpreted as an
+  EtherType when VOICI is carried over a link-layer transport (for example,
+  IEEE 802 Ethertype), as a Next Header if carried over IP, and as a UDP
+  port when VOICI is carried in a UDP payload.  This restoration is an VOICI
+  responsibility; the Content Mechanism does not need to manage framing
+  recovery and dispatching to original handler.
+
+* **I (1 bit):**  Integrity flag.  When set, a CRC-16 field is present and
+  covers the Session ID through the end of the Protocol Data Unit.  When clear, 
+  no integrity check is carried.
+
+* **CI (2 bits):**  Content Identifier.  Identifies the mechanism used for
+  the Protocol Data Unit.  VOICI profiles register new CI values as needed.
+
+  The initial CI assignments are:
+
+| CI   | Content Mechanism              |
+|------|--------------------------------|
+| 0    | Unprocessed / raw              |
+| 1    | SCHC                           |
+| 2    | Reserved for future mechanisms |
+| 3    | Extended CI                    |
+{: #tab-ci-initial title="Initial CI assignments"}
+
+Profiles that register a new CI value MUST specify the mechanism and
+its parameters.
+
+* **SSS (3 bits):**  Session ID prefix (for Unprocessed/Raw and SCHC) or
+  Extended CI value (for Extended CI).  The SSS field uses an inline/extended
+  encoding:
+
+  * **SSS in 0..6:** The value is inlined in the first byte.
+    - For Unprocessed/Raw or SCHC: `SID = SSS`.  Header is 1 byte
+      (unless O=1 or I=1).
+    - For Extended CI: `Ext_CI = SSS + 3`.  A Session ID follows as a
+      LEB128 integer.
+
+  * **SSS = 7:** A LEB128 variable-length integer follows.
+    - For Unprocessed/Raw or SCHC: read LEB128 value;
+      `SID = LEB128_val + 7`.
+    - For Extended CI: read LEB128 value;
+      `Ext_CI = LEB128_val + 10`.  If SSS was inline (0-6), the Session ID
+      follows immediately after the first byte.  If SSS was 7, the Session
+      ID follows immediately after the LEB128 integer.
+
+  This gives 7 inline values in the 1-byte form, with continuous
+  extension to 16-bit values via LEB128.
+
+* **Session ID (variable length):**  Identifies the logical session that
+  owns this Protocol Data Unit.  When a mechanism is registered with VOICI, the
+  mechanism profile assigns Session IDs and registers them with the VOICI
+  instance.  The receiver VOICI uses the Session ID to dispatch the Protocol
+  Data Unit to the correct handler -- for SCHC, the handler is an SCHC
+  Instance; for Unprocessed/Raw, the handler is the raw dispatch path.
+  The Session ID space (0-65535) is local to the link over which VOICI
+  is carried and to the Content Mechanism.
+
+  For CI values 00, 01 (Unprocessed/Raw and SCHC), the Session ID is derived 
+  from the SSS field as described in the parsing order (SID = SSS for inline 
+  values, SID = LEB128_val + 7 for extended values).  For Extended CI, the
+  Session ID follows the Extended CI value as a LEB128 integer.
+
+  The LEB128 encoding follows {{DWARF}}:
+    - If the value is less than 128, a single byte is used (MSB = 0).
+    - If the value is 128 or greater, two bytes are used (first byte
+      MSB = 1).
+    - No values larger than 16 bits (65535) are supported.
+
+  The receiver reads the Session ID by inspecting the most significant
+  bit of each LEB128 byte: if the MSB is 1, the next byte is part of the
+  value; if 0, the byte is the last.
+
+
+* **CRC (16 bits, optional):**  Present when I=1.  CRC-16/CCITT-FALSE
+    over the flag byte (V-O-I-CI-SSS), the Extended CI value bytes (if
+    CI=3), the Session ID, the Original EtherType/Port field (if O=1),
+    and the entire Protocol Data Unit.
+
+* **Original EtherType/Port (1-2 bytes, optional):**  Present when O=1.
+  Carries the EtherType or UDP port number that was replaced by the VOICI
+  carrier.  The field is interpreted as an EtherType when VOICI is carried
+  over a link-layer transport (for example, IEEE 802 Ethertype) and as a
+  UDP port when VOICI is carried in a UDP payload.
+
+
+## Minimal Header
+
+When no optional fields are needed (V=0, O=0, I=0) and the SSS field
+encodes an inline value (0-6), the VOICI header reduces to a single byte:
+
+~~~
+ 0 1 2 3 4 5 6 7   bit
++-+-+-+---+-----+
+|V|O|I|CI |S S S| (inline value, 1 byte)
++-+-+-+---+-----+
+~~~
+{: #fig-voici-minimal title="Minimal VOICI Header (1 byte)"}
+
+## Header Size Summary
+
+VOICI header sizes for various configurations (Unprocessed/Raw and SCHC):
+
+| Configuration               | V | O | I | Session ID 0-6 | 7-133 | 134+  |
+|-----------------------------|---|---|---|----------------|-------|-------|
+| Session ID only             | 0 | 0 | 0 | 1 B            | 2 B   | 3 B   |
+| + CRC                       | 0 | 0 | 1 | 3 B            | 4 B   | 5 B   |
+| + Orig. EtherType/UDP Port  | 0 | 1 | 0 | 3 B            | 4 B   | 5 B   |
+| + Orig. IP Next Header      | 0 | 1 | 0 | 2 B            | 3 B   | 4 B   |
+| All fields                  | 0 | 1 | 1 | 4-5 B          | 5-6 B | 6-7 B |
+{: #tab-header-size title="VOICI header size summary (Unprocessed/Raw, SCHC)"}
+
+Extended CI (CI=3) adds the Extended CI value and a LEB128 Session ID;
+the minimum is 2 bytes (flag byte + 1-byte Session ID, SSS inline),
+growing to 6 bytes (SSS=7 with 2-byte LEB128 Ext_CI + 2-byte LEB128 SID).
+
+## Header Field Reference
+
+| Field             | Size   | Description                                   |
+|-------------------|--------|-----------------------------------------------|
+| V                 | 1 bit  | VOICI header version                          |
+| O                 | 1 bit  | Original EtherType/Port presence              |
+| I                 | 1 bit  | CRC presence                                  |
+| CI                | 2 bits | Content Identifier                            |
+| SSS               | 3 bits | Inline value (SID or Extended CI, 0-6)        |
+| Extended CI       | 0-2 B  | Extended CI value (inline or LEB128 + 10)     |
+| Session ID        | 0-2 B  | Session identifier (inline, LEB128+7, or raw) |
+| Original ET/Port  | 1-2 B  | EtherType, Next Header, or UDP port (if O=1)  |
+| CRC               | 2 B    | Integrity check (if I=1)                      |
+{: #tab-header-fields title="VOICI header field summary"}
+
+
+# VOICI Operation {#section-voici-operation}
+
+This section specifies the normative processing procedures for the VOICI
+module on both the transmit (egress) and receive (ingress) paths.
+
+## Transmit Path (Egress)
+
+On the sender side, VOICI operates as an encapsulator.  A Data Unit is
+passed to the VOICI module by an upper-layer handler together with
+metadata that determines the header fields.  The inputs are:
+
+
+- the **Data Unit** (payload), which may be compressed (for example, an
+  SCHC residue), unprocessed, or encoded by another mechanism;
+- a **Session ID**, identifying the logical session that owns the Data
+  Unit;
+- a **Content Identifier**, indicating the mechanism that encoded the
+  Data Unit;
+- an **Original Framing** value (EtherType, IP Next Header, or UDP port)
+  when the carrier framing has been replaced by the VOICI carrier and
+  the receiver must restore it;
+- an **Integrity** flag indicating whether a CRC is required.
+
+The VOICI module constructs the header as follows:
+
+1. **V field**: Set to 0 (current version).
+
+2. **O field**: Set to 1 if an Original Framing value is provided and
+   must be carried to the receiver for restoration; otherwise set to 0.
+
+3. **I field**: Set to 1 if integrity protection is required; otherwise
+   set to 0.
+
+4. **CI field**: Set to the Content Identifier associated with the Data
+   Unit.  For Unprocessed/Raw traffic, CI=0.  For SCHC-compressed
+   traffic, CI=1.  For mechanisms registered under Extended CI, CI=3
+   (see below).
+
+5. **SSS field and Session ID**:
+   - For CI=0 (Unprocessed/Raw) or CI=1 (SCHC):
+     - If Session ID is in the range 0-6: set SSS to the Session ID
+       value (inline encoding).  No additional Session ID bytes are
+       emitted.
+     - If Session ID is 7 or greater: set SSS to 7.  Encode
+       `Session ID - 7` as a LEB128 integer following the first byte.
+   - For CI=3 (Extended CI):
+     - The SSS field encodes the Extended CI value rather than the
+       Session ID.  If the Extended CI value is in the range 3-9: set
+       SSS to `Extended CI - 3` (inline).  Otherwise: set SSS to 7 and
+       encode `Extended CI - 10` as a LEB128 integer following the
+       first byte.
+     - After the Extended CI value (inline or LEB128), encode the
+       Session ID as a LEB128 integer.
+
+6. **CRC field** (if I=1): Compute CRC-16/CCITT-FALSE over the
+   following bytes in wire order: the base header byte (V-O-I-CI-SSS),
+   any Extended CI LEB128 bytes, the Session ID bytes, the Original
+   EtherType/Port value (if O=1), and the entire Data Unit payload.
+   The CRC field itself is NOT included in the computation.  Append the
+   2-byte CRC field.
+
+7. **Original EtherType/Port field** (if O=1): Append the Original
+   Framing value.  For Ethernet or UDP carriers, the field is 2 bytes
+   (EtherType or UDP port).  For IPv6, the field is 1 byte (Next
+   Header value).
+
+8. **Prepend** the complete VOICI header to the Data Unit to form the
+   VOICI-encapsulated frame.
+
+9. **Carrier framing**: Replace the outgoing frame's carrier identifier
+   (EtherType, IP Protocol Number, or UDP port) with the VOICI carrier
+   value defined in {{SCHC-PROTO-NUMS}}.
+
+10. Submit the encapsulated frame to lower layers for transmission.
+
+## Receive Path (Ingress)
+
+On the receiver side, VOICI operates as a dispatcher.  Frames arriving
+with the VOICI Ethertype, IP Protocol Number, or UDP port
+({{SCHC-PROTO-NUMS}}) are handed to the VOICI module.  Processing is as
+follows:
+
+1. **Parse the base header**: Read the first byte; extract V, O, I, CI,
+   and SSS.
+
+2. **Version check**: If V indicates a version other than 0, the header
+   format is unsupported.  The frame MUST be discarded.
+
+3. **Reserved CI check**: If CI=2 (Reserved), the Data Unit MUST be
+   discarded.
+
+4. **Decode SSS**:
+   - For CI=0 (Unprocessed/Raw) or CI=1 (SCHC):
+     - If SSS is 0-6: Session ID equals SSS.
+     - If SSS is 7: read a LEB128 integer from the following byte(s);
+       Session ID equals `LEB128_val + 7`.
+   - For CI=3 (Extended CI):
+     - If SSS is 0-6: Extended CI equals `SSS + 3`.
+     - If SSS is 7: read a LEB128 integer; Extended CI equals
+       `LEB128_val + 10`.
+     - Read the Session ID as a LEB128 integer from the bytes
+       following the Extended CI value (or following the first byte,
+       if SSS was 0-6).
+
+5. **Read CRC field** (if I=1): Read the 2-byte CRC value.
+
+6. **Read Original EtherType/Port field** (if O=1): Read the Original
+   EtherType/Port field.  The field is 2 bytes for Ethernet/UDP carriers,
+   1 byte for IPv6 Next Header.
+
+7. **CRC verification** (if I=1): Compute the expected CRC over all
+   preceding bytes (base header byte, Extended CI bytes if CI=3, Session ID
+   bytes, Original EtherType/Port if O=1), and the Data Unit payload.
+   Note that the CRC field appears before the Original EtherType/Port
+   field on the wire but covers it; the receiver reads both fields before
+   verifying.  If the computed CRC does not match the received CRC, the
+   frame MUST be discarded.
+
+8. **Dispatch**: Pass the Data Unit payload to the processing handler
+   identified by the CI value and Session ID.  For CI=1 (SCHC), the
+   handler is the SCHC Instance corresponding to that Session ID.
+   For CI=0 (Unprocessed/Raw), the handler is the raw dispatch path.
+
+9. **Handler processing**: The handler processes the Data Unit
+   (decompression, pass-through, etc.) and returns the result to VOICI.
+
+10. **Restore original framing** (if O=1): Write the Original
+    EtherType/Port value read in step 6 into the carrier framing of the
+    outgoing frame (EtherType, IP Next Header, or UDP port as
+    appropriate).
+
+11. **Egress to upper layers**: Pass the reconstituted frame to the
+    appropriate upper-layer handler. If O=1, the upper-layer handler is the
+    one identified by the reconstructed carrier header.
+
+## Error Handling
+
+If the receiver cannot identify a handler for a given (CI, Session ID)
+pair -- for example, the Session ID is not associated with any
+configured handler, or the CI value is not supported -- the frame MUST
+be discarded.
+
+
+# Session ID Allocation
+
+The Session ID is locally significant to the link.  Allocation strategies
+depend on the deployment topology:
+
+## P2P Deployments
+
+Session IDs MAY be negotiated between peers during Session establishment,
+or assigned by the Domain Manager during provisioning.  Session ID 0 is
+a valid Session ID (no reserved values).
+
+## Star Topologies
+
+The Network Gateway assigns Session IDs and communicates them to Devices
+during provisioning. The Gateway maintains the Session ID to handler mapping.
+
+## Mesh and Other Topologies
+
+Session IDs MAY be assigned by a Network or Domain Manager, or negotiated
+between peers.
+
+## Relay Remapping
+
+A relay or gateway translating between links MAY remap Session IDs. The
+Session ID space is local to each link segment; there is no requirement
+for global uniqueness.
+
+# Content Mechanism Identification
+
+The CI field provides content mechanism identification. VOICI at the receiver
+uses the CI and Session ID values to dispatch the Data Unit to the correct 
+handler without inspecting the Data Unit contents.
+
+This is needed when a link carries Data Units from multiple mechanisms
+simultaneously. Common scenarios include:
+
+* A gateway that receives both SCHC-compressed Data Units and Management and 
+  diagnostic traffic that bypasses compression entirely.
+* Future registrations of additional mechanisms via new CI values.
+
+## Registration of New Mechanisms
+
+Profiles that register a new CI value MUST specify the mechanism and its
+parameters. Implementations that encounter a CI value they do not
+recognize MUST drop the Data Unit.
+
+# Integrity Protection
+
+The I flag and CRC field provide optional integrity protection for the
+Data Unit.
+
+## CRC Scope
+
+The CRC covers the VOICI header and the Data Unit payload, excluding the
+CRC field itself.  Specifically, the CRC is computed over the base header
+byte (V-O-I-CI-SSS), the Extended CI LEB128 bytes (if CI=3 and SSS=7),
+the Session ID, the Original EtherType/Port field (if O=1), and the
+entire Data Unit payload.
+
+## CRC Algorithm
+
+CRC-16/CCITT-FALSE (polynomial 0x1021, initial value 0xFFFF, no
+reflection, no final XOR) is used.  This is the same algorithm used in
+many constrained network protocols (for example, Bluetooth, CAN bus).
+
+## Relationship to ULP Checksums
+
+Some compression strategies elide Upper Layer Protocol (ULP) checksums
+(for example, UDP checksum) to reduce residue size. On links where the
+underlying transport does not guarantee Data Unit integrity, this makes the
+VOICI CRC the sole integrity mechanism.  Profiles MUST specify whether
+ULP checksum elision is permitted and, if so, whether the VOICI CRC is
+mandatory to compensate.
+
+## Limitations
+
+The CRC provides integrity (corruption detection) but NOT authentication.
+An attacker can compute a valid CRC for a forged Data Unit. Authentication
+must be provided by the underlying transport or a higher-layer security
+mechanism.
+
+# Interaction with Protocol Numbers
+
+The protocol numbers defined in {{SCHC-PROTO-NUMS}} identify VOICI traffic
+on the wire.  The VOICI header follows the carrier header and provides
+Session multiplexing, Content Mechanism dispatch, and optional integrity
+protection.
+
+~~~
+    +--------------------+
+    | Protocol Data Unit |  (content mechanism determined by CI)
+    +--------------------+
+    |  VOICI Header      |  (variable length, 1-7 bytes)
+    +--------------------+
+    |  Carrier Header    |  (Ethertype / IP Protocol / UDP)
+    +--------------------+
+    |  ...               |  (link layer or lower IP)
+    +--------------------+
+~~~
+{: #fig-voici-stack title="VOICI Layer Stack"}
+
+The CI field identifies the mechanism (CI=0: unprocessed; CI=1: SCHC;
+other values: future registrations).
+
+## Over Ethertype
+
+The SCHC Ethertype identifies VOICI-encapsulated traffic.  When O=1,
+the Original EtherType/Port field carries the replaced EtherType value.
+
+## Over IP Protocol Number
+
+The SCHC IP Protocol Number identifies VOICI-encapsulated traffic.
+The VOICI header follows the IPv6 header (or the IPv6 extension
+containing the protocol number).  When O=1, the Original
+EtherType/Port field carries the replaced IPv6 Next Header value.
+
+## Over UDP
+
+The SCHC UDP port identifies VOICI-encapsulated traffic carried in the
+UDP payload.  The UDP header provides its own checksum, which may make
+the VOICI CRC redundant.  When O=1, the Original EtherType/Port field
+carries the replaced UDP destination port number.
+
+# Security Considerations
+
+## Session Hijacking
+
+If Session IDs are predictable, an attacker could inject Protocol Data Units 
+with a forged Session ID to redirect traffic to a different handler.
+Session IDs SHOULD be randomly generated or derived from a secure key exchange.
+In star topologies where the Domain Manager assigns Session IDs, the assigned
+values SHOULD be cryptographically random rather than sequential or
+otherwise predictable.
+
+## Integrity Limitations
+
+The CRC provides corruption detection but not authentication.  An attacker
+with link access can forge Protocol Data Units with valid CRCs.  Authentication 
+must be provided by the underlying transport (for example, IPsec, TLS) or a
+higher-layer mechanism (for example, OSCORE).
+
+## Flag Bit Manipulation
+
+When the I flag is set, the CRC covers the flag byte, making flag bit
+flipping detectable at the cost of a CRC failure.  When I=0, flipping
+the O flag (0 to 1) would cause the receiver to consume payload bytes as
+an Original EtherType/Port field.  Higher-layer authentication is
+recommended for adversarial environments.
+
+## CI Manipulation
+
+When the I flag is set, the CRC covers the CI field, making manipulation
+detectable.  When I=0, an attacker can flip the CI field to dispatch the
+Protocol Data Unit to a wrong handler, causing decompression errors or potential
+information leakage if the wrong decompressor produces interpretable
+output.
+
+## Denial of Service
+
+An attacker could inject Protocol Data Units with invalid Session IDs, causing
+the receiver to waste resources on lookup failures.  Implementations SHOULD
+rate-limit Session ID lookup failures.
+
+## Replay Attacks
+
+VOICI carries no sequence number or timestamp.  An attacker with link access
+could replay previously captured Protocol Data Units.  For SCHC's primary use 
+cases (sensor telemetry, periodic reporting), replayed Protocol Data Units carry
+stale data that is not harmful.  Deployments requiring replay protection SHOULD
+use a higher-layer mechanism (for example, OSCORE, DTLS) or the underlying
+transport.
+
+# IANA Considerations
+
+## Content Identifier Registry
+
+This document requests the creation of a "Content Identifier (CI)"
+registry.  The initial entries are:
+
+| Value | Content Mechanism                   | Reference     |
+|-------|-------------------------------------|---------------|
+| 0     | Unprocessed / raw                   | This document |
+| 1     | SCHC {{SCHC}}                       | {{SCHC}}      |
+| 2     | Reserved                            | --            |
+| 3     | Extended CI                         | This document |
+{: #tab-iana-ci title="Initial CI registry entries"}
+
+New CI values are assigned per {{RFC8126}} "Specification Required"
+policy.
+
+## Session ID Space
+
+The Session ID space is locally significant to the link and Content Mechanism.
+No IANA assignment is required.
+
+## Future Extensions
+
+The VOICI header allows for future extensions.  New flags or fields would
+be introduced through a subsequent revision of this document, with IANA
+registry updates.  Existing implementations that encounter unrecognized
+flag combinations MUST treat the unrecognized flags as zero and process
+the header according to their supported flags.  For the CI field,
+implementations that encounter a CI value they do not recognize MUST drop
+the Protocol Data Unit.
+
+--- back
