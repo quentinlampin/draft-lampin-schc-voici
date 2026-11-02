@@ -93,6 +93,8 @@ correct handler, and optional integrity protection.  The encapsulation is
 designed for minimal overhead, reducing to 1 byte in the common case
 (inline Session IDs 0-6 with 2-bit Content Identifier).
 
+# Requirements Language
+
 {::boilerplate bcp14}
 
 # Requirements
